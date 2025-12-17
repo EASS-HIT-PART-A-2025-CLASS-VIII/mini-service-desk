@@ -4,6 +4,10 @@ from typing import Optional
 from sqlmodel import SQLModel, Field
 
 
+def now_utc() -> datetime:
+    return datetime.now(timezone.utc)
+
+
 # ---------- DB MODEL ----------
 class Ticket(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -15,10 +19,10 @@ class Ticket(SQLModel, table=True):
     request_type: str
 
     created_by_id: int = Field(foreign_key="user.id")
-    operator_id: int | None = Field(default=None, foreign_key="user.id")
+    operator_id: Optional[int] = Field(default=None, foreign_key="user.id")
 
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=now_utc())
+    updated_at: datetime = Field(default_factory=now_utc())
 
 # ---------- INPUT MODEL ----------
 class TicketCreate(SQLModel):
@@ -26,7 +30,7 @@ class TicketCreate(SQLModel):
     body: str
     urgency: str = "normal"
     request_type: str
-    created_by_id: int
+    
 
 #---------- UPDATE MODEL ----------
 class TicketUpdate(SQLModel):

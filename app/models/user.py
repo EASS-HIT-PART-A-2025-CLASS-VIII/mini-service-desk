@@ -7,13 +7,14 @@ from typing import Optional
 class UserBase(SQLModel):
     name: str
     email: EmailStr
+    is_admin: bool = Field(default=False)
 
 
 # Database table model
 class User(UserBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     hashed_password: str
-    is_active: bool = Field(default=False)
+    is_admin: bool = Field(default=False)
 
 
 # Model for creating a user (request body)
