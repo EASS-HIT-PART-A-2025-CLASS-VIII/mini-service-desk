@@ -24,7 +24,7 @@ def create_user(client, name, email=None, password="pass1234", is_admin=False):
 
 def login(client, email, password) -> str:
     r = client.post(
-        "/api/login",
+        "/api/users/login",
         data={"username": email, "password": password},
         headers={"Content-Type": "application/x-www-form-urlencoded"},
     )

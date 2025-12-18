@@ -4,7 +4,7 @@ def auth_header(token: str) -> dict:
 
 def login(client, email, password) -> str:
     r = client.post(
-        "/api/login",
+        "/api/users/login",
         data={"username": email, "password": password},  # <-- form fields
         headers={"Content-Type": "application/x-www-form-urlencoded"},
     )
