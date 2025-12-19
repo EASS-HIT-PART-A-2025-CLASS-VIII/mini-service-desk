@@ -1,80 +1,75 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useNavigate } from "react-router-dom";
 import { apiFetch } from "../api/client.js";
 import { useAuth } from "../auth/AuthContext.jsx";
 
 export default function TicketsDetailsPage() {
   const { id } = useParams();
-  const { token } = useAuth();
+  const { token, logout } = useAuth();
+  const navigate = useNavigate();
 
   const [ticket, setTicket] = useState(null);
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState("");
+  const [err, setErr] = useState(null);
 
-  async function loadAll() {
-    setErr("");
-    setLoading(true);
+  async function load() {
+    setErr(null);
     try {
       const t = await apiFetch(`/api/tickets/${id}`, { token });
-      setTicket(t);
-
-      // IMPORTANT: this path must match your backend
-      // If your backend is different, change only this line.
       const c = await apiFetch(`/api/tickets/${id}/comments`, { token });
+      setTicket(t);
       setComments(c);
     } catch (e) {
-      setErr(e.message || "Failed to load ticket");
-    } finally {
-      setLoading(false);
+      setErr(e.message);
     }
   }
 
-  async function submitComment(e) {
+  async function addComment(e) {
     e.preventDefault();
-    setErr("");
-
+    setErr(null);
     try {
-      // IMPORTANT: this path must match your backend
       await apiFetch(`/api/tickets/${id}/comments`, {
         token,
         method: "POST",
         json: { body: newComment },
       });
-
       setNewComment("");
-      await loadAll();
+      await load();
     } catch (e) {
-      setErr(e.message || "Failed to add comment");
+      setErr(e.message);
     }
   }
 
+  function onLogout() {
+    logout();
+    navigate("/login");
+  }
+
   useEffect(() => {
-    loadAll();
+    load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  if (loading) return <div style={{ padding: 16 }}>Loading…</div>;
-  if (err) return <div style={{ padding: 16, color: "crimson" }}>Error: {err}</div>;
-  if (!ticket) return <div style={{ padding: 16 }}>Ticket not found.</div>;
+  if (err) return <div style={{ padding: 16 }}>Error: {err}</div>;
+  if (!ticket) return <div style={{ padding: 16 }}>Loading…</div>;
 
   return (
-    <div style={{ padding: 16, maxWidth: 900, margin: "0 auto", fontFamily: "system-ui" }}>
-      <Link to="/tickets">← Back to tickets</Link>
+    <div style={{ maxWidth: 900, margin: "30px auto", fontFamily: "system-ui" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <Link to="/tickets">← Back</Link>
+        <button onClick={onLogout}>Logout</button>
+      </div>
 
       <h2 style={{ marginTop: 12 }}>
         Ticket #{ticket.id}: {ticket.subject}
       </h2>
 
       <div style={{ padding: 12, border: "1px solid #ddd", borderRadius: 8 }}>
-        <div><b>Status:</b> {ticket.status}</div>
-        <div><b>Urgency:</b> {ticket.urgency}</div>
-        <div><b>Type:</b> {ticket.request_type}</div>
-        <div style={{ marginTop: 10 }}>
-          <b>Body:</b>
-          <div style={{ whiteSpace: "pre-wrap" }}>{ticket.body}</div>
-        </div>
+        <p><b>Status:</b> {ticket.status}</p>
+        <p><b>Urgency:</b> {ticket.urgency}</p>
+        <p><b>Type:</b> {ticket.request_type}</p>
+        <p><b>Body:</b><br />{ticket.body}</p>
       </div>
 
       <h3 style={{ marginTop: 24 }}>Comments</h3>
@@ -86,8 +81,7 @@ export default function TicketsDetailsPage() {
           {comments.map((c) => (
             <li key={c.id} style={{ marginBottom: 10 }}>
               <div style={{ fontSize: 13, opacity: 0.8 }}>
-                by <b>{c.author_name ?? c.author_id ?? "Unknown"}</b>{" "}
-                {c.created_at ? `• ${c.created_at}` : ""}
+                author_id: {c.author_id} | {new Date(c.created_at).toLocaleString()}
               </div>
               <div>{c.body}</div>
             </li>
@@ -95,7 +89,7 @@ export default function TicketsDetailsPage() {
         </ul>
       )}
 
-      <form onSubmit={submitComment} style={{ marginTop: 16 }}>
+      <form onSubmit={addComment} style={{ marginTop: 16, display: "grid", gap: 10 }}>
         <textarea
           value={newComment}
           onChange={(e) => setNewComment(e.target.value)}
@@ -103,9 +97,7 @@ export default function TicketsDetailsPage() {
           placeholder="Write a comment…"
           style={{ width: "100%", padding: 10 }}
         />
-        <button type="submit" disabled={!newComment.trim()} style={{ marginTop: 8 }}>
-          Add comment
-        </button>
+        <button disabled={!newComment}>Add comment</button>
       </form>
     </div>
   );

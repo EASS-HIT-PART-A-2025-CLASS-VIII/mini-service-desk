@@ -9,10 +9,11 @@ export default function LoginPage() {
   const [err, setErr] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  const { setToken } = useAuth();
+  const { setToken, refreshMe } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
+  // where to go after login (for normal users)
   const from = location.state?.from || "/tickets";
 
   async function onSubmit(e) {
@@ -21,18 +22,21 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
+      // OAuth2PasswordRequestForm login
       const data = await apiFetch("/api/users/login", {
         method: "POST",
-        form: {
-          username: email, // backend expects "username"
-          password,
-        },
+        form: { username: email, password },
       });
 
-      // common FastAPI token shape:
-      // { "access_token": "...", "token_type": "bearer" }
-      setToken(data.access_token);
-      navigate(from, { replace: true });
+      const accessToken = data.access_token;
+      setToken(accessToken);
+
+      // fetch /me and store user in AuthContext
+      const me = await refreshMe(accessToken);
+
+      // role-based redirect
+      if (me?.is_admin) navigate("/admin", { replace: true });
+      else navigate(from, { replace: true });
     } catch (e) {
       setErr(e.message);
     } finally {
@@ -53,6 +57,7 @@ export default function LoginPage() {
             onChange={(e) => setEmail(e.target.value)}
             placeholder="admin@example.com"
             style={{ width: "100%", padding: 10, marginTop: 6 }}
+            autoComplete="username"
           />
         </label>
 
@@ -64,6 +69,7 @@ export default function LoginPage() {
             type="password"
             placeholder="••••••••"
             style={{ width: "100%", padding: 10, marginTop: 6 }}
+            autoComplete="current-password"
           />
         </label>
 
