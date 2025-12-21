@@ -1,3 +1,5 @@
+const API_BASE = import.meta.env.VITE_API_BASE || "";
+
 export async function apiFetch(path, { token, method = "GET", json, form } = {}) {
   const headers = { Accept: "application/json" };
 
@@ -16,7 +18,8 @@ export async function apiFetch(path, { token, method = "GET", json, form } = {})
 
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const res = await fetch(path, { method, headers, body });
+  const url = path.startsWith("http") ? path : `${API_BASE}${path}`;
+  const res = await fetch(url, { method, headers, body });
 
   // Try to parse JSON error nicely
   const text = await res.text();
