@@ -27,5 +27,6 @@ class TicketCommentRead(SQLModel):
     id: int
     ticket_id: int
     author_id: int
+    author_name: Optional[str] = None
     body: str
     created_at: datetime

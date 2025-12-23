@@ -58,7 +58,7 @@ export default function TicketsDetailsPage() {
   return (
     <Shell
       title={`Ticket #${ticket.id}`}
-      subtitle={ticket.subject}
+      subtitle={ticket.description}
       right={
         <button className="btn ghost" onClick={onLogout}>
           Logout
@@ -80,8 +80,8 @@ export default function TicketsDetailsPage() {
           </div>
 
           <div className="card solid" style={{ padding: 14 }}>
-            <div className="label">Body</div>
-            <div style={{ whiteSpace: "pre-wrap" }}>{ticket.body}</div>
+            <div className="label">Description</div>
+            <div style={{ whiteSpace: "pre-wrap" }}>{ticket.description}</div>
           </div>
         </section>
 
@@ -94,12 +94,12 @@ export default function TicketsDetailsPage() {
           {comments.length === 0 ? (
             <div className="meta" style={{ marginTop: 12 }}>No comments yet.</div>
           ) : (
-            <ul className="list" style={{ marginTop: 12 }}>
+            <ul className="commentList" style={{ marginTop: 12 }}>
               {comments.map((c) => (
-                <li key={c.id} className="item">
-                  <div className="spread">
-                    <div style={{ fontWeight: 650 }}>author_id: {c.author_id}</div>
-                    <div className="meta">{new Date(c.created_at).toLocaleString()}</div>
+                <li key={c.id} className="commentListItem">
+                  <div className="meta" style={{ display: "flex", justifyContent: "space-between" }}>
+                    <span style={{ fontWeight: 600 }}>{c.author_name ?? `User #${c.author_id}`}</span>
+                    <span>{new Date(c.created_at).toLocaleString()}</span>
                   </div>
                   <div style={{ marginTop: 8, whiteSpace: "pre-wrap" }}>{c.body}</div>
                 </li>

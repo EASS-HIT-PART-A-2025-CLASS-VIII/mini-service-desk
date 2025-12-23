@@ -38,7 +38,7 @@ def test_user_cant_patch_status_or_operator(client):
 
     r = client.post(
         f"{BASE}/",
-        json={"subject": "A", "body": "B", "request_type": "it"},
+        json={"description": "Issue A", "request_type": "software"},
         headers=auth_header(token),
     )
     assert r.status_code == 201, r.text
@@ -46,7 +46,7 @@ def test_user_cant_patch_status_or_operator(client):
 
     r = client.patch(
         f"{BASE}/{tid}",
-        json={"status": "in_progress", "operator_id": 999, "urgency": "high"},
+        json={"status": "pending", "operator_id": 999, "urgency": "high"},
         headers=auth_header(token),
     )
     assert r.status_code == 200, r.text
@@ -58,13 +58,12 @@ def test_user_cant_patch_status_or_operator(client):
 
     r = client.patch(
         f"{BASE}/{tid}",
-        json={"subject": "NEW", "body": "NEWBODY"},
+        json={"description": "Updated description"},
         headers=auth_header(token),
     )
     assert r.status_code == 200, r.text
     body = r.json()
-    assert body["subject"] == "NEW"
-    assert body["body"] == "NEWBODY"
+    assert body["description"] == "Updated description"
 
 
 def test_admin_can_list_all_and_patch_any_ticket(client):
@@ -73,7 +72,7 @@ def test_admin_can_list_all_and_patch_any_ticket(client):
 
     r = client.post(
         f"{BASE}/",
-        json={"subject": "Printer", "body": "broken", "request_type": "hardware"},
+        json={"description": "Printer broken", "request_type": "hardware"},
         headers=auth_header(user_token),
     )
     assert r.status_code == 201, r.text
@@ -91,11 +90,11 @@ def test_admin_can_list_all_and_patch_any_ticket(client):
 
     r = client.patch(
         f"{BASE}/{tid}",
-        json={"status": "in_progress", "urgency": "high", "operator_id": admin["id"]},
+        json={"status": "pending", "urgency": "high", "operator_id": admin["id"]},
         headers=auth_header(admin_token),
     )
     assert r.status_code == 200, r.text
     body = r.json()
-    assert body["status"] == "in_progress"
+    assert body["status"] == "pending"
     assert body["urgency"] == "high"
     assert body["operator_id"] == admin["id"]

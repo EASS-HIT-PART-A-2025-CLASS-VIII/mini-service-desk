@@ -1,3 +1,5 @@
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session, select
 
@@ -29,6 +31,19 @@ def _must_have_access(current_user: User, ticket: Ticket):
         raise HTTPException(status_code=403, detail="Not allowed")
 
 
+def _serialize_comment(
+    comment: TicketComment, author_name: Optional[str] = None
+) -> TicketCommentRead:
+    return TicketCommentRead(
+        id=comment.id,
+        ticket_id=comment.ticket_id,
+        author_id=comment.author_id,
+        author_name=author_name,
+        body=comment.body,
+        created_at=comment.created_at,
+    )
+
+
 @router.get("/{ticket_id}/comments", response_model=list[TicketCommentRead])
 def list_comments(
     ticket_id: int,
@@ -38,11 +53,17 @@ def list_comments(
     ticket = _get_ticket_or_404(session, ticket_id)
     _must_have_access(current_user, ticket)
 
-    return session.exec(
-        select(TicketComment)
+    comment_rows = session.exec(
+        select(TicketComment, User)
+        .join(User, TicketComment.author_id == User.id)
         .where(TicketComment.ticket_id == ticket_id)
         .order_by(TicketComment.created_at.asc())
     ).all()
+
+    return [
+        _serialize_comment(comment, author_name=user.name)
+        for comment, user in comment_rows
+    ]
 
 
 @router.post(
@@ -68,4 +89,4 @@ def add_comment(
     session.add(comment)
     session.commit()
     session.refresh(comment)
-    return comment
+    return _serialize_comment(comment, author_name=current_user.name)

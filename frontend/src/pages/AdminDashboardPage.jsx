@@ -5,7 +5,12 @@ import { useAuth } from "../auth/AuthContext.jsx";
 import Shell from "../components/shell.jsx";
 import AdvancedFilterModal, { evaluateAdvanced } from "../components/AdvancedFilterModal.jsx";
 
-const STATUS = ["new", "in_progress", "resolved", "closed"];
+const STATUS = ["new", "assigned", "pending", "closed"];
+
+function truncateText(text, max = 30) {
+  if (!text) return "";
+  return text.length > max ? `${text.slice(0, max)}…` : text;
+}
 
 function compare(a, b) {
   if (a == null && b == null) return 0;
@@ -20,6 +25,9 @@ export default function AdminDashboardPage() {
   const navigate = useNavigate();
 
   const [tickets, setTickets] = useState([]);
+  const [operators, setOperators] = useState([]); // admins/operators list
+  const [userById, setUserById] = useState({}); // submitters + fallback lookup
+
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState(null);
 
@@ -38,12 +46,53 @@ export default function AdminDashboardPage() {
   const [page, setPage] = useState(1);
   const pageSize = 12;
 
+  function nameForUserId(id) {
+    if (id == null) return "—";
+    return userById[id]?.name ?? `User ${id}`;
+  }
+
+  function nameForOperatorId(id) {
+    if (id == null) return "—";
+    const op = operators.find((o) => o.id === id);
+    return op?.name ?? userById[id]?.name ?? `User ${id}`;
+  }
+
   async function loadTickets() {
     setErr(null);
     setLoading(true);
     try {
-      const data = await apiFetch("/api/tickets/", { token });
-      setTickets(data);
+      const [tix, ops] = await Promise.all([
+        apiFetch("/api/tickets/", { token }),
+        apiFetch("/api/users/operators", { token }),
+      ]);
+
+      setTickets(tix);
+      setOperators(ops);
+
+      // Fetch submitter/operator users by ID so we can show NAMES in table & filters
+      const ids = new Set();
+      for (const t of tix) {
+        if (t.created_by_id != null) ids.add(t.created_by_id);
+        if (t.operator_id != null) ids.add(t.operator_id);
+      }
+
+      // avoid refetching what we already have
+      const missing = [...ids].filter((id) => userById[id] == null);
+
+      if (missing.length) {
+        const users = await Promise.all(
+          missing.map((id) =>
+            apiFetch(`/api/users/${id}`, { token }).catch(() => null)
+          )
+        );
+        setUserById((prev) => {
+          const next = { ...prev };
+          for (const u of users) {
+            if (u && u.id != null) next[u.id] = u;
+          }
+          return next;
+        });
+      }
     } catch (e) {
       setErr(e.message);
     } finally {
@@ -69,28 +118,43 @@ export default function AdminDashboardPage() {
     }
   }
 
+  function getSortValue(t, key) {
+    if (key === "created_by_id") return nameForUserId(t.created_by_id);
+    if (key === "operator_id") return nameForOperatorId(t.operator_id);
+    if (key === "description") return t.description ?? "";
+    return t?.[key];
+  }
+
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
+
+    const ctx = {
+      userById,
+      operators,
+    };
 
     return tickets
       .filter((t) => {
         const okStatus = statusFilter === "all" || t.status === statusFilter;
+
         const okQ =
           !needle ||
           String(t.id).includes(needle) ||
-          (t.subject ?? "").toLowerCase().includes(needle) ||
-          (t.body ?? "").toLowerCase().includes(needle) ||
-          (t.request_type ?? "").toLowerCase().includes(needle);
-        const okAdv = evaluateAdvanced(t, adv);
+          (t.description ?? "").toLowerCase().includes(needle) ||
+          (t.request_type ?? "").toLowerCase().includes(needle) ||
+          nameForUserId(t.created_by_id).toLowerCase().includes(needle) ||
+          nameForOperatorId(t.operator_id).toLowerCase().includes(needle);
+
+        const okAdv = evaluateAdvanced(t, adv, ctx);
         return okStatus && okQ && okAdv;
       })
       .sort((a, b) => {
-        const av = a?.[sortKey];
-        const bv = b?.[sortKey];
+        const av = getSortValue(a, sortKey);
+        const bv = getSortValue(b, sortKey);
         const c = compare(av, bv);
         return sortDir === "asc" ? c : -c;
       });
-  }, [tickets, statusFilter, q, adv, sortKey, sortDir]);
+  }, [tickets, statusFilter, q, adv, sortKey, sortDir, userById, operators]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const pageSafe = Math.min(page, totalPages);
@@ -100,7 +164,6 @@ export default function AdminDashboardPage() {
     return filtered.slice(start, start + pageSize);
   }, [filtered, pageSafe]);
 
-  // reset page when filters change
   useEffect(() => setPage(1), [statusFilter, q, adv]);
 
   const allOnPageSelected = useMemo(() => {
@@ -111,11 +174,8 @@ export default function AdminDashboardPage() {
   function toggleAllOnPage() {
     setSelected((prev) => {
       const next = new Set(prev);
-      if (allOnPageSelected) {
-        pageRows.forEach((t) => next.delete(t.id));
-      } else {
-        pageRows.forEach((t) => next.add(t.id));
-      }
+      if (allOnPageSelected) pageRows.forEach((t) => next.delete(t.id));
+      else pageRows.forEach((t) => next.add(t.id));
       return next;
     });
   }
@@ -138,11 +198,9 @@ export default function AdminDashboardPage() {
     <>
       <Shell title="Admin Dashboard" subtitle="All tickets across the system">
         <div className="toolbarRow" style={{ marginBottom: 12 }}>
-          
-
-          <div style={{ flex: 1 }} />
-
-          <button className="btn ghost" onClick={loadTickets}>Refresh</button>
+          <button className="btn ghost" onClick={loadTickets}>
+            Refresh
+          </button>
           <button className="btn ghost" onClick={() => setAdvOpen(true)}>
             Advanced filter
           </button>
@@ -154,10 +212,16 @@ export default function AdminDashboardPage() {
           <div className="toolbarRow">
             <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
               <div className="label">Status</div>
-              <select className="select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+              <select
+                className="select"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+              >
                 <option value="all">All</option>
                 {STATUS.map((s) => (
-                  <option key={s} value={s}>{s}</option>
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
                 ))}
               </select>
             </div>
@@ -165,17 +229,25 @@ export default function AdminDashboardPage() {
             <input
               className="input"
               style={{ flex: "1 1 280px" }}
-              placeholder="Search: id / subject / body / type…"
+              placeholder="Search: id / submitter / description / sub-category / assigned…"
               value={q}
               onChange={(e) => setQ(e.target.value)}
             />
           </div>
 
           <div className="pillRow">
-            <div className="pill"><b>Total:</b> {tickets.length}</div>
-            <div className="pill"><b>Shown:</b> {filtered.length}</div>
-            <div className="pill"><b>Selected:</b> {selected.size}</div>
-            {adv ? <div className="pill"><b>Advanced:</b> ON</div> : <div className="pill"><b>Advanced:</b> OFF</div>}
+            <div className="pill">
+              <b>Total:</b> {tickets.length}
+            </div>
+            <div className="pill">
+              <b>Shown:</b> {filtered.length}
+            </div>
+            <div className="pill">
+              <b>Selected:</b> {selected.size}
+            </div>
+            <div className="pill">
+              <b>Advanced:</b> {adv ? "ON" : "OFF"}
+            </div>
           </div>
         </section>
 
@@ -185,7 +257,12 @@ export default function AdminDashboardPage() {
               <thead>
                 <tr>
                   <th className="th" style={{ width: 44 }}>
-                    <input className="checkbox" type="checkbox" checked={allOnPageSelected} onChange={toggleAllOnPage} />
+                    <input
+                      className="checkbox"
+                      type="checkbox"
+                      checked={allOnPageSelected}
+                      onChange={toggleAllOnPage}
+                    />
                   </th>
 
                   <th className="th">
@@ -207,8 +284,8 @@ export default function AdminDashboardPage() {
                   </th>
 
                   <th className="th">
-                    <button className="thBtn" onClick={() => toggleSort("subject")}>
-                      Description <span className="sortIcon">{sortIcon("subject")}</span>
+                    <button className="thBtn" onClick={() => toggleSort("description")}>
+                      Description <span className="sortIcon">{sortIcon("description")}</span>
                     </button>
                   </th>
 
@@ -261,17 +338,16 @@ export default function AdminDashboardPage() {
                         />
                       </td>
 
-                      <td className="td"><b>#{t.id}</b></td>
-                      <td className="td">{t.status}</td>
-                      <td className="td">{t.created_by_id}</td>
                       <td className="td">
-                        <div style={{ fontWeight: 600 }}>{t.subject}</div>
-                        <div className="meta" style={{ marginTop: 4 }}>
-                          {(t.body ?? "").slice(0, 80)}{(t.body ?? "").length > 80 ? "…" : ""}
-                        </div>
+                        <b>#{t.id}</b>
+                      </td>
+                      <td className="td">{t.status}</td>
+                      <td className="td">{nameForUserId(t.created_by_id)}</td>
+                      <td className="td" title={t.description ?? ""}>
+                        <div>{truncateText(t.description, 30)}</div>
                       </td>
                       <td className="td">{t.request_type}</td>
-                      <td className="td">{t.operator_id ?? "—"}</td>
+                      <td className="td">{nameForOperatorId(t.operator_id)}</td>
                       <td className="td">{t.urgency}</td>
 
                       <td className="td">
@@ -292,10 +368,18 @@ export default function AdminDashboardPage() {
             </div>
 
             <div style={{ display: "flex", gap: 10 }}>
-              <button className="btn ghost" disabled={pageSafe <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
+              <button
+                className="btn ghost"
+                disabled={pageSafe <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
                 Prev
               </button>
-              <button className="btn ghost" disabled={pageSafe >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>
+              <button
+                className="btn ghost"
+                disabled={pageSafe >= totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              >
                 Next
               </button>
             </div>
@@ -308,6 +392,8 @@ export default function AdminDashboardPage() {
         value={adv}
         onClose={() => setAdvOpen(false)}
         onApply={(ast) => setAdv(ast)}
+        token={token}
+        operators={operators}
       />
     </>
   );

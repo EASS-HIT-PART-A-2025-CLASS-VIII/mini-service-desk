@@ -2,7 +2,14 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session, select
 
 from app.database import get_session
-from app.models.ticket import Ticket, TicketCreate, TicketRead, TicketUpdate, now_utc
+from app.models.ticket import (
+    Ticket,
+    TicketCreate,
+    TicketRead,
+    TicketUpdate,
+    TicketStatus,
+    now_utc,
+)
 from app.models.user import User
 from app.services.security import get_current_user
 
@@ -15,11 +22,13 @@ def create_ticket(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
+    # Always start as NEW and unassigned
     ticket = Ticket(
-        subject=payload.subject,
-        body=payload.body,
+        description=payload.description,
         request_type=payload.request_type,
         urgency=payload.urgency,
+        status=TicketStatus.new,
+        operator_id=None,
         created_by_id=current_user.id,
         created_at=now_utc(),
         updated_at=now_utc(),
@@ -39,9 +48,7 @@ def list_tickets(
     if current_user.is_admin:
         return session.exec(select(Ticket)).all()
 
-    return session.exec(
-        select(Ticket).where(Ticket.created_by_id == current_user.id)
-    ).all()
+    return session.exec(select(Ticket).where(Ticket.created_by_id == current_user.id)).all()
 
 
 @router.get("/{ticket_id}", response_model=TicketRead)
@@ -76,13 +83,32 @@ def patch_ticket(
 
     data = patch.model_dump(exclude_unset=True)
 
-    # user can only edit subject/body; admin can edit everything
+    # user can only edit description; admin can edit everything
     if not current_user.is_admin:
-        allowed = {"subject", "body"}
+        allowed = {"description"}
         data = {k: v for k, v in data.items() if k in allowed}
+
+    prev_operator_id = ticket.operator_id
 
     for k, v in data.items():
         setattr(ticket, k, v)
+
+    # ---- Backend rules to align with UI ----
+    # 1) assigned requires operator_id
+    if ticket.status == TicketStatus.assigned and ticket.operator_id is None:
+        raise HTTPException(status_code=400, detail="Assigned status requires an operator")
+
+    # 2) new cannot have operator_id
+    if ticket.status == TicketStatus.new and ticket.operator_id is not None:
+        raise HTTPException(status_code=400, detail="New status cannot have an operator assigned")
+
+    # 3) Auto-status: when operator becomes set, new -> assigned (unless admin explicitly set pending/closed)
+    operator_became_set = prev_operator_id is None and ticket.operator_id is not None
+    status_was_explicitly_set = "status" in data
+
+    if operator_became_set and not status_was_explicitly_set:
+        if ticket.status == TicketStatus.new:
+            ticket.status = TicketStatus.assigned
 
     ticket.updated_at = now_utc()
 

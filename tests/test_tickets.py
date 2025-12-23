@@ -25,7 +25,7 @@ def test_user_can_create_and_see_own_tickets(client):
     create_user(client, "Ben", "ben@example.com", "pass1234")
     token = login(client, "ben@example.com", "pass1234")
 
-    payload = {"subject": "Printer", "body": "broken", "request_type": "hardware"}
+    payload = {"description": "Printer broken", "request_type": "hardware"}
     r = client.post("/api/tickets/", json=payload, headers=auth_header(token))
     assert r.status_code == 201, r.text
     tid = r.json()["id"]
@@ -42,7 +42,7 @@ def test_patch_restrictions_for_user(client):
 
     r = client.post(
         "/api/tickets/",
-        json={"subject": "A", "body": "B", "request_type": "it"},
+        json={"description": "A", "request_type": "software"},
         headers=auth_header(token),
     )
     tid = r.json()["id"]
@@ -50,10 +50,10 @@ def test_patch_restrictions_for_user(client):
     # user tries to change status (should be ignored / unchanged)
     r = client.patch(
         f"/api/tickets/{tid}",
-        json={"status": "closed", "subject": "New"},
+        json={"status": "closed", "description": "New"},
         headers=auth_header(token),
     )
     assert r.status_code == 200, r.text
     data = r.json()
-    assert data["subject"] == "New"
+    assert data["description"] == "New"
     assert data["status"] == "new"  # unchanged

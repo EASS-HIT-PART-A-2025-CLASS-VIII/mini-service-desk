@@ -17,15 +17,19 @@ def create_user(client, name: str, email: str, password: str, is_admin: bool = F
 
 def login(client, email: str, password: str) -> str:
     # Your backend uses OAuth2PasswordRequestForm => form fields: username/password
-    r = client.post("/api/login", data={"username": email, "password": password})
+    r = client.post(
+        "/api/users/login",
+        data={"username": email, "password": password},
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
     assert r.status_code == 200, r.text
     return r.json()["access_token"]
 
 
-def create_ticket(client, token: str, subject="S", body="B", request_type="it") -> int:
+def create_ticket(client, token: str, description="D", request_type="software") -> int:
     r = client.post(
         f"{BASE_TICKETS}/",
-        json={"subject": subject, "body": body, "request_type": request_type},
+        json={"description": description, "request_type": request_type},
         headers=auth_header(token),
     )
     assert r.status_code == 201, r.text
@@ -37,7 +41,7 @@ def test_user_can_add_and_list_comments_on_own_ticket(client):
     token = login(client, "u1@example.com", "pass1234")
 
     tid = create_ticket(
-        client, token, subject="Printer", body="Broken", request_type="hardware"
+        client, token, description="Printer Broken", request_type="hardware"
     )
 
     # Add comment
@@ -51,6 +55,7 @@ def test_user_can_add_and_list_comments_on_own_ticket(client):
     assert data["ticket_id"] == tid
     assert data["body"] == "first comment"
     assert data["author_id"] is not None
+    assert data["author_name"] == "U1"
 
     # List comments
     r = client.get(f"{BASE_TICKETS}/{tid}/comments", headers=auth_header(token))
@@ -59,6 +64,7 @@ def test_user_can_add_and_list_comments_on_own_ticket(client):
     assert len(comments) == 1
     assert comments[0]["body"] == "first comment"
     assert comments[0]["ticket_id"] == tid
+    assert comments[0]["author_name"] == "U1"
 
 
 def test_user_cant_list_or_add_comment_on_someone_elses_ticket(client):
@@ -101,13 +107,17 @@ def test_admin_can_add_and_list_comments_on_any_ticket(client):
         headers=auth_header(admin_token),
     )
     assert r.status_code == 201, r.text
-    assert r.json()["body"] == "admin note"
+    admin_comment = r.json()
+    assert admin_comment["body"] == "admin note"
+    assert admin_comment["author_name"] == "Admin"
 
     # Admin lists comments (should include admin note)
     r = client.get(f"{BASE_TICKETS}/{tid}/comments", headers=auth_header(admin_token))
     assert r.status_code == 200, r.text
-    bodies = [c["body"] for c in r.json()]
+    comments = r.json()
+    bodies = [c["body"] for c in comments]
     assert "admin note" in bodies
+    assert any(c["author_name"] == "Admin" for c in comments)
 
 
 def test_comment_list_is_sorted_by_created_at(client):
@@ -130,3 +140,32 @@ def test_comment_list_is_sorted_by_created_at(client):
     assert r.status_code == 200, r.text
     comments = r.json()
     assert [c["body"] for c in comments] == ["c1", "c2"]
+    assert all(c["author_name"] == "U1" for c in comments)
+
+
+def test_comment_list_includes_author_names_for_multiple_users(client):
+    create_user(client, "Owner", "owner@example.com", "pass1234", is_admin=False)
+    owner_token = login(client, "owner@example.com", "pass1234")
+    ticket_id = create_ticket(client, owner_token)
+
+    create_user(client, "Helper", "helper@example.com", "pass1234", is_admin=True)
+    helper_token = login(client, "helper@example.com", "pass1234")
+
+    # Owner leaves comment
+    client.post(
+        f"{BASE_TICKETS}/{ticket_id}/comments",
+        json={"body": "from owner"},
+        headers=auth_header(owner_token),
+    )
+    # Helper leaves comment
+    client.post(
+        f"{BASE_TICKETS}/{ticket_id}/comments",
+        json={"body": "from helper"},
+        headers=auth_header(helper_token),
+    )
+
+    r = client.get(f"{BASE_TICKETS}/{ticket_id}/comments", headers=auth_header(helper_token))
+    assert r.status_code == 200, r.text
+    comments = r.json()
+    assert [c["body"] for c in comments] == ["from owner", "from helper"]
+    assert [c["author_name"] for c in comments] == ["Owner", "Helper"]
