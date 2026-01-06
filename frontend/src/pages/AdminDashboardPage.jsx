@@ -20,6 +20,25 @@ function compare(a, b) {
   return String(a).localeCompare(String(b));
 }
 
+function getStatusColor(status) {
+  switch (status) {
+    case "new": return "#00d4ff";
+    case "assigned": return "#7c5cff";
+    case "pending": return "#f59e0b";
+    case "closed": return "#22c55e";
+    default: return "#7c5cff";
+  }
+}
+
+function getUrgencyColor(urgency) {
+  switch (urgency) {
+    case "high": return "#ef4444";
+    case "normal": return "#f59e0b";
+    case "low": return "#22c55e";
+    default: return "#7c5cff";
+  }
+}
+
 export default function AdminDashboardPage() {
   const { token, logout } = useAuth();
   const navigate = useNavigate();
@@ -196,28 +215,29 @@ export default function AdminDashboardPage() {
 
   return (
     <>
-      <Shell title="Admin Dashboard" subtitle="All tickets across the system">
-        <div className="toolbarRow" style={{ marginBottom: 12 }}>
+      <Shell title="Admin Dashboard" subtitle="Manage all tickets across the system">
+        <div className="toolbarRow" style={{ marginBottom: "16px" }}>
           <button className="btn ghost" onClick={loadTickets}>
-            Refresh
+            🔄 Refresh
           </button>
           <button className="btn ghost" onClick={() => setAdvOpen(true)}>
-            Advanced filter
+            🔍 Advanced Filter
           </button>
         </div>
 
         {err && <div className="error">{err}</div>}
 
-        <section className="card" style={{ marginBottom: 12 }}>
+        <section className="card" style={{ marginBottom: "16px" }}>
           <div className="toolbarRow">
-            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-              <div className="label">Status</div>
+            <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+              <label className="label" style={{ margin: 0 }}>Status</label>
               <select
                 className="select"
+                style={{ width: "auto", minWidth: "140px" }}
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
               >
-                <option value="all">All</option>
+                <option value="all">All Statuses</option>
                 {STATUS.map((s) => (
                   <option key={s} value={s}>
                     {s}
@@ -229,25 +249,31 @@ export default function AdminDashboardPage() {
             <input
               className="input"
               style={{ flex: "1 1 280px" }}
-              placeholder="Search: id / submitter / description / sub-category / assigned…"
+              placeholder="🔍 Search: id, submitter, description, category..."
               value={q}
               onChange={(e) => setQ(e.target.value)}
             />
           </div>
 
           <div className="pillRow">
-            <div className="pill">
+            <span className="pill">
               <b>Total:</b> {tickets.length}
-            </div>
-            <div className="pill">
+            </span>
+            <span className="pill">
               <b>Shown:</b> {filtered.length}
-            </div>
-            <div className="pill">
+            </span>
+            <span className="pill">
               <b>Selected:</b> {selected.size}
-            </div>
-            <div className="pill">
-              <b>Advanced:</b> {adv ? "ON" : "OFF"}
-            </div>
+            </span>
+            <span
+              className="pill"
+              style={{
+                borderColor: adv ? "#7c5cff" : undefined,
+                color: adv ? "#7c5cff" : undefined,
+              }}
+            >
+              <b>Filter:</b> {adv ? "ON" : "OFF"}
+            </span>
           </div>
         </section>
 
@@ -291,13 +317,13 @@ export default function AdminDashboardPage() {
 
                   <th className="th">
                     <button className="thBtn" onClick={() => toggleSort("request_type")}>
-                      Sub-Category <span className="sortIcon">{sortIcon("request_type")}</span>
+                      Category <span className="sortIcon">{sortIcon("request_type")}</span>
                     </button>
                   </th>
 
                   <th className="th">
                     <button className="thBtn" onClick={() => toggleSort("operator_id")}>
-                      Assigned to <span className="sortIcon">{sortIcon("operator_id")}</span>
+                      Assigned <span className="sortIcon">{sortIcon("operator_id")}</span>
                     </button>
                   </th>
 
@@ -307,7 +333,7 @@ export default function AdminDashboardPage() {
                     </button>
                   </th>
 
-                  <th className="th" style={{ width: 120 }}>
+                  <th className="th" style={{ width: 100 }}>
                     Action
                   </th>
                 </tr>
@@ -317,13 +343,13 @@ export default function AdminDashboardPage() {
                 {loading ? (
                   <tr className="tr">
                     <td className="td" colSpan={9}>
-                      <div className="meta">Loading…</div>
+                      <div className="meta loading">Loading tickets...</div>
                     </td>
                   </tr>
                 ) : pageRows.length === 0 ? (
                   <tr className="tr">
                     <td className="td" colSpan={9}>
-                      <div className="meta">No matching tickets.</div>
+                      <div className="meta">No matching tickets found.</div>
                     </td>
                   </tr>
                 ) : (
@@ -339,20 +365,39 @@ export default function AdminDashboardPage() {
                       </td>
 
                       <td className="td">
-                        <b>#{t.id}</b>
+                        <b style={{ color: "#7c5cff" }}>#{t.id}</b>
                       </td>
-                      <td className="td">{t.status}</td>
+                      <td className="td">
+                        <span
+                          className="badge"
+                          style={{
+                            borderColor: getStatusColor(t.status),
+                            color: getStatusColor(t.status),
+                          }}
+                        >
+                          {t.status}
+                        </span>
+                      </td>
                       <td className="td">{nameForUserId(t.created_by_id)}</td>
                       <td className="td" title={t.description ?? ""}>
-                        <div>{truncateText(t.description, 30)}</div>
+                        {truncateText(t.description, 30)}
                       </td>
                       <td className="td">{t.request_type}</td>
                       <td className="td">{nameForOperatorId(t.operator_id)}</td>
-                      <td className="td">{t.urgency}</td>
+                      <td className="td">
+                        <span
+                          style={{
+                            color: getUrgencyColor(t.urgency),
+                            fontWeight: 600,
+                          }}
+                        >
+                          {t.urgency}
+                        </span>
+                      </td>
 
                       <td className="td">
                         <Link className="btn ghost" to={`/admin/tickets/${t.id}`}>
-                          Open
+                          Open →
                         </Link>
                       </td>
                     </tr>
@@ -362,25 +407,25 @@ export default function AdminDashboardPage() {
             </table>
           </div>
 
-          <div className="toolbarRow" style={{ marginTop: 12, justifyContent: "space-between" }}>
+          <div className="toolbarRow" style={{ marginTop: "16px", justifyContent: "space-between" }}>
             <div className="meta">
-              Page <b>{pageSafe}</b> / <b>{totalPages}</b>
+              Page <b>{pageSafe}</b> of <b>{totalPages}</b>
             </div>
 
-            <div style={{ display: "flex", gap: 10 }}>
+            <div style={{ display: "flex", gap: "8px" }}>
               <button
                 className="btn ghost"
                 disabled={pageSafe <= 1}
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
               >
-                Prev
+                ← Prev
               </button>
               <button
                 className="btn ghost"
                 disabled={pageSafe >= totalPages}
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               >
-                Next
+                Next →
               </button>
             </div>
           </div>

@@ -4,6 +4,25 @@ import { apiFetch } from "../api/client.js";
 import { useAuth } from "../auth/AuthContext.jsx";
 import Shell from "../components/shell.jsx";
 
+function getStatusColor(status) {
+  switch (status) {
+    case "new": return "#00d4ff";
+    case "assigned": return "#7c5cff";
+    case "pending": return "#f59e0b";
+    case "closed": return "#22c55e";
+    default: return "#7c5cff";
+  }
+}
+
+function getUrgencyColor(urgency) {
+  switch (urgency) {
+    case "high": return "#ef4444";
+    case "normal": return "#f59e0b";
+    case "low": return "#22c55e";
+    default: return "#7c5cff";
+  }
+}
+
 export default function AdminTicketPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -67,7 +86,7 @@ export default function AdminTicketPage() {
     const op = admins.find((u) => u.id === ticket.operator_id);
     return op ? op.name : "—";
   }, [ticket, admins]);
-  
+
 
   function onChangeStatus(nextStatus) {
     setStatusVal(nextStatus);
@@ -138,158 +157,207 @@ export default function AdminTicketPage() {
     }
   }
 
-  if (loading) return <div style={{ padding: 16 }}>Loading…</div>;
-  if (err) return <div style={{ padding: 16, color: "crimson" }}>Error: {err}</div>;
-  if (!ticket) return <div style={{ padding: 16 }}>Ticket not found.</div>;
+  if (loading) {
+    return (
+      <Shell title="Loading..." subtitle="">
+        <div className="card">
+          <div className="meta loading">Loading ticket details...</div>
+        </div>
+      </Shell>
+    );
+  }
+
+  if (err) {
+    return (
+      <Shell title="Error" subtitle="">
+        <div className="error">Error: {err}</div>
+        <Link className="navlink" to="/admin" style={{ marginTop: "16px", display: "inline-flex" }}>
+          ← Back to dashboard
+        </Link>
+      </Shell>
+    );
+  }
+
+  if (!ticket) {
+    return (
+      <Shell title="Not Found" subtitle="">
+        <div className="error">Ticket not found</div>
+      </Shell>
+    );
+  }
 
   return (
     <>
-      <Shell
-        title={`Ticket #${ticket.id}`}
-        subtitle={ticket.description}
-        right={<Link className="btn ghost" to="/admin">Back</Link>}
-      >
-        <section className="card">
-          <h3 className="cardTitle">Ticket details</h3>
+      <Shell title={`Ticket #${ticket.id}`} subtitle={truncateText(ticket.description, 60)}>
+        <div style={{ marginBottom: "16px" }}>
+          <Link className="navlink" to="/admin">
+            ← Back to dashboard
+          </Link>
+        </div>
 
-          <div className="pillRow" style={{ marginBottom: 12 }}>
-            <span className="pill">
-              <span className="pillKey">Status</span>
-              <span className="pillVal">{ticket.status}</span>
-            </span>
+        <div className="grid">
+          {/* Ticket Details & Edit */}
+          <section className="card">
+            <h3 className="cardTitle">📝 Ticket Details</h3>
 
-            <span className="pill">
-              <span className="pillKey">Urgency</span>
-              <span className="pillVal">{ticket.urgency}</span>
-            </span>
-
-            <span className="pill">
-              <span className="pillKey">Type</span>
-              <span className="pillVal">{ticket.request_type}</span>
-            </span>
-
-            <span className="pill">
-              <span className="pillKey">Operator</span>
-              <span className="pillVal">{operatorLabel}</span>
-            </span>
-
-            <span className="pill">
-              <span className="pillKey">Created by</span>
-              <span className="pillVal">{submitterName}</span>
-            </span>
-          </div>
-
-          <div className="commentList" style={{ marginTop: 12 }}>
-            <div className="commentListItem">
-              <div className="meta" style={{ fontWeight: 600, textTransform: "uppercase" }}>
-                Description
-              </div>
-              <div
+            <div className="pillRow" style={{ marginBottom: "20px" }}>
+              <span
+                className="badge"
                 style={{
-                  whiteSpace: "pre-wrap",
-                  lineHeight: 1.5,
-                  marginTop: 8,
+                  borderColor: getStatusColor(ticket.status),
+                  color: getStatusColor(ticket.status),
                 }}
               >
+                Status: {ticket.status}
+              </span>
+              <span
+                className="badge"
+                style={{
+                  borderColor: getUrgencyColor(ticket.urgency),
+                  color: getUrgencyColor(ticket.urgency),
+                }}
+              >
+                Urgency: {ticket.urgency}
+              </span>
+              <span className="badge">
+                Category: {ticket.request_type}
+              </span>
+              <span className="badge">
+                Assigned: {operatorLabel}
+              </span>
+              <span className="badge">
+                Created by: {submitterName}
+              </span>
+            </div>
+
+            <div className="card solid" style={{ padding: "16px", marginBottom: "20px" }}>
+              <div className="label">Description</div>
+              <div style={{ whiteSpace: "pre-wrap", marginTop: "8px", lineHeight: 1.7 }}>
                 {ticket.description}
               </div>
             </div>
-          </div>
 
-          <form onSubmit={saveQuickEdit} className="form" style={{ marginTop: 16 }}>
-            <div>
-              <div className="label">Status</div>
-              <select
-                className="select"
-                value={statusVal}
-                onChange={(e) => onChangeStatus(e.target.value)}
-              >
-                <option value="new">new</option>
-                <option value="assigned">assigned</option>
-                <option value="pending">pending</option>
-                <option value="closed">closed</option>
-              </select>
+            <form onSubmit={saveQuickEdit} className="form">
+              <div>
+                <label className="label">Status</label>
+                <select
+                  className="select"
+                  value={statusVal}
+                  onChange={(e) => onChangeStatus(e.target.value)}
+                >
+                  <option value="new">🆕 New</option>
+                  <option value="assigned">👤 Assigned</option>
+                  <option value="pending">⏳ Pending</option>
+                  <option value="closed">✅ Closed</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="label">Urgency</label>
+                <select
+                  className="select"
+                  value={urgencyVal}
+                  onChange={(e) => setUrgencyVal(e.target.value)}
+                >
+                  <option value="low">🟢 Low</option>
+                  <option value="normal">🟡 Normal</option>
+                  <option value="high">🔴 High</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="label">Assign to Operator</label>
+                <select
+                  className="select"
+                  value={operatorIdVal}
+                  onChange={(e) => onChangeOperator(e.target.value)}
+                >
+                  <option value="">— Unassigned —</option>
+                  {admins.map((a) => (
+                    <option key={a.id} value={String(a.id)}>
+                      {a.name}
+                    </option>
+                  ))}
+                </select>
+
+                {statusVal === "new" && (
+                  <div className="meta" style={{ marginTop: "8px" }}>
+                    💡 Assigning an operator will automatically move status to <b>assigned</b>.
+                  </div>
+                )}
+              </div>
+
+              <button className="btn primary" disabled={saving}>
+                {saving ? "Saving..." : "💾 Save Changes"}
+              </button>
+            </form>
+          </section>
+
+          {/* Comments Section */}
+          <section className="card">
+            <div className="spread" style={{ marginBottom: "16px" }}>
+              <h3 className="cardTitle" style={{ margin: 0 }}>💬 Comments</h3>
+              <span className="badge">{comments.length}</span>
             </div>
 
-            <div>
-              <div className="label">Urgency</div>
-              <select
-                className="select"
-                value={urgencyVal}
-                onChange={(e) => setUrgencyVal(e.target.value)}
-              >
-                <option value="low">low</option>
-                <option value="normal">normal</option>
-                <option value="high">high</option>
-              </select>
-            </div>
-
-            <div>
-              <div className="label">Operator</div>
-              <select
-                className="select"
-                value={operatorIdVal}
-                onChange={(e) => onChangeOperator(e.target.value)}
-              >
-                <option value="">— Unassigned —</option>
-                {admins.map((a) => (
-                  <option key={a.id} value={String(a.id)}>
-                    {a.name}
-                  </option>
-                ))}
-              </select>
-
-              {statusVal === "new" && (
-                <div className="meta" style={{ marginTop: 6 }}>
-                  Assigning an operator will automatically move status to <b>assigned</b>.
-                </div>
-              )}
-            </div>
-
-            <button className="btn primary" disabled={saving}>
-              {saving ? "Saving..." : "Save changes"}
-            </button>
-          </form>
-        </section>
-
-        <section className="card" style={{ marginTop: 16 }}>
-          <h3 className="cardTitle">Comments</h3>
-
-          {comments.length === 0 ? (
-            <div className="meta">No comments yet.</div>
-          ) : (
-            <ul className="commentList">
-              {comments.map((c) => {
-                const authorLabel = c.author_name ?? `User #${c.author_id}`;
-                return (
-                  <li key={c.id} className="commentListItem">
-                    <div className="meta">
-                      {authorLabel} • {String(c.created_at)}
+            {comments.length === 0 ? (
+              <div className="meta" style={{ marginBottom: "20px" }}>
+                No comments yet. Be the first to add one!
+              </div>
+            ) : (
+              <ul className="commentList" style={{ marginBottom: "20px" }}>
+                {comments.map((c, index) => (
+                  <li
+                    key={c.id}
+                    className="commentListItem"
+                    style={{ animationDelay: `${index * 0.05}s` }}
+                  >
+                    <div
+                      className="meta"
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        marginBottom: "8px",
+                      }}
+                    >
+                      <span style={{ fontWeight: 600, color: "var(--accent-primary)" }}>
+                        {c.author_name ?? `User #${c.author_id}`}
+                      </span>
+                      <span>{new Date(c.created_at).toLocaleString()}</span>
                     </div>
-                    <div>{c.body}</div>
+                    <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.6 }}>
+                      {c.body}
+                    </div>
                   </li>
-                );
-              })}
-            </ul>
-          )}
+                ))}
+              </ul>
+            )}
 
-          <form onSubmit={submitComment} className="form" style={{ marginTop: 12 }}>
-            <div>
-              <div className="label">Add comment</div>
-              <textarea
-                className="textarea"
-                value={newComment}
-                onChange={(e) => setNewComment(e.target.value)}
-                rows={4}
-                placeholder="Write a comment as admin…"
-              />
-            </div>
-            <button className="btn primary" disabled={!newComment}>
-              Add comment
-            </button>
-          </form>
-        </section>
+            <form onSubmit={submitComment} className="form">
+              <div>
+                <label className="label">Add Admin Comment</label>
+                <textarea
+                  className="textarea"
+                  value={newComment}
+                  onChange={(e) => setNewComment(e.target.value)}
+                  rows={4}
+                  placeholder="Write your comment..."
+                />
+              </div>
+              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <button className="btn primary" disabled={!newComment}>
+                  💬 Add Comment
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
       </Shell>
     </>
   );
+}
+
+function truncateText(text, max = 60) {
+  if (!text) return "";
+  return text.length > max ? `${text.slice(0, max)}…` : text;
 }
