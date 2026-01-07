@@ -1,5 +1,6 @@
 """Security middleware for adding security headers to responses."""
 
+import os
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -22,14 +23,28 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         # Referrer policy
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
 
-        # Content Security Policy (basic)
-        response.headers["Content-Security-Policy"] = (
-            "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline'; "
-            "style-src 'self' 'unsafe-inline'; "
-            "img-src 'self' data: https:; "
-            "font-src 'self' https://fonts.gstatic.com; "
-            "connect-src 'self'"
-        )
+        # Content Security Policy
+        # In dev, allow Swagger UI CDN resources
+        # In prod, use strict policy
+        env = os.getenv("ENV", "dev")
+        if env == "prod":
+            csp = (
+                "default-src 'self'; "
+                "script-src 'self'; "
+                "style-src 'self'; "
+                "img-src 'self' data:; "
+                "connect-src 'self'"
+            )
+        else:
+            # Dev mode: allow Swagger UI from CDN
+            csp = (
+                "default-src 'self'; "
+                "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+                "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+                "img-src 'self' data: https:; "
+                "font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net; "
+                "connect-src 'self'"
+            )
+        response.headers["Content-Security-Policy"] = csp
 
         return response

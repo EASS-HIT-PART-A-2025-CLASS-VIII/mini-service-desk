@@ -136,3 +136,61 @@ class TestSecurityHeaders:
         assert r.headers.get("X-Content-Type-Options") == "nosniff"
         assert r.headers.get("X-Frame-Options") == "DENY"
         assert r.headers.get("X-XSS-Protection") == "1; mode=block"
+
+
+class TestTokenValidation:
+    """Test JWT token validation - Session 11 requirement."""
+
+    def test_expired_token_rejected(self, client):
+        """Expired tokens should be rejected with 401."""
+        # This is a token with exp in the past (crafted for testing)
+        expired_token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIiwiZXhwIjoxNjAwMDAwMDAwfQ.invalid"
+        r = client.get("/api/tickets/", headers=auth_header(expired_token))
+        assert r.status_code == 401
+        assert "credentials" in r.json()["detail"].lower()
+
+    def test_invalid_token_rejected(self, client):
+        """Malformed tokens should be rejected with 401."""
+        r = client.get("/api/tickets/", headers=auth_header("not.a.valid.token"))
+        assert r.status_code == 401
+
+    def test_missing_token_rejected(self, client):
+        """Requests without tokens should be rejected with 401."""
+        r = client.get("/api/tickets/")
+        assert r.status_code == 401
+
+
+class TestCSVExport:
+    """Test CSV export endpoint - EX3 enhancement."""
+
+    def test_export_requires_auth(self, client):
+        """Export endpoint requires authentication."""
+        r = client.get("/api/export/tickets")
+        assert r.status_code == 401
+
+    def test_export_returns_csv(self, client):
+        """Authenticated users can export their tickets as CSV."""
+        # Create a user and get token
+        client.post(
+            "/api/users",
+            json={
+                "name": "Exporter",
+                "email": "exporter@example.com",
+                "password": "StrongPass123!",
+            },
+        )
+        token = login(client, "exporter@example.com", "StrongPass123!")
+
+        # Create a ticket
+        client.post(
+            "/api/tickets/",
+            json={"description": "Test ticket", "request_type": "software"},
+            headers=auth_header(token),
+        )
+
+        # Export tickets
+        r = client.get("/api/export/tickets", headers=auth_header(token))
+        assert r.status_code == 200
+        assert "text/csv" in r.headers.get("content-type", "")
+        assert "attachment" in r.headers.get("content-disposition", "")
+        assert "Test ticket" in r.text

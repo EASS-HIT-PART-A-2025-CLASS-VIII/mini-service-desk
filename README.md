@@ -1,150 +1,170 @@
 # Mini Service Desk
 
-FastAPI + React implementation of a lightweight service desk where employees can open IT requests, collaborate with operators through comments, and track progress via a modern UI. The goal is to have a deployable reference that still feels realistic: SQLModel models, JWT auth, admin dashboards, and Pytest coverage.
+FastAPI + React implementation of a lightweight service desk where employees can open IT requests, collaborate with operators through comments, and track progress via a modern UI. Features AI-powered ticket creation via Ollama, CSV export, and comprehensive security.
 
 ## Highlights
 
 - FastAPI backend with OAuth2 password flow, JWT auth, and typed SQLModel models for users, tickets, and ticket comments.
 - React 19 + Vite frontend with role-aware routing, ticket creation flow, admin dashboard, ticket detail & comment threads.
+- **AI-powered ticket creation** via Ollama LLM integration - describe your issue naturally and let AI create the ticket.
+- **CSV export** for tickets - download your ticket data for reporting.
 - SQLite by default for frictionless local work, with optional PostgreSQL connection via `DATABASE_URL`.
-- Docker Compose setup builds both services and persists data volume for the API, and the stack is already deployed on Render for a zero-install demo.
-- Pytest suite exercises ticket and comment flows end-to-end using FastAPI's TestClient.
+- **Redis** for rate limiting and async job processing.
+- Docker Compose setup builds all services with persistent data volumes.
+- Pytest suite with security tests, async tests, and end-to-end coverage.
 
 ## Tech stack
 
-- **Backend:** FastAPI, SQLModel, SQLite/PostgreSQL, JWT (PyJWT) authentication.
-- **Frontend:** React 19, Vite, React Router, custom hooks for auth and API calls.
-- **Tooling:** pytest, uvicorn, npm, Docker/Docker Compose.
+- **Backend:** FastAPI, SQLModel, SQLite/PostgreSQL, JWT (PyJWT), Redis
+- **Frontend:** React 19, Vite, React Router, custom hooks for auth and API calls
+- **AI:** Ollama with Llama 3.2 for conversational ticket creation
+- **Tooling:** pytest, uvicorn, npm, Docker/Docker Compose
 
 ## Project structure
 
 ```
 mini-service-desk/
-├── app/                # FastAPI application (routers, models, services)
+├── app/                # FastAPI application (routers, models, services, middleware)
 ├── frontend/           # React + Vite single-page app
-├── tests/              # Pytest suites for API flows
+├── tests/              # Pytest suites for API flows and security
+├── scripts/            # Utility scripts (demo, seed_admin, refresh)
+├── docs/               # Documentation and runbooks
 ├── Dockerfile.*        # Docker images for backend & frontend
-├── compose.yaml        # One-command full stack
+├── compose.yaml        # One-command full stack (Backend, Frontend, Redis, Ollama)
 ├── pyproject.toml      # Python project metadata
 └── requirements.txt    # Locked backend dependencies
 ```
 
-## Getting started (local development)
+## Quick Start
 
-Already want to try it without installing anything? The stack is deployed on Render:
+### Docker Compose (Recommended)
 
-- Backend API: https://mini-service-desk.onrender.com/
-- Frontend SPA: https://mini-service-desk-1.onrender.com/
+```bash
+docker compose up --build
+```
 
-Grab the URLs above to explore the live environment. When you need to make changes or run tests, follow the steps below to reproduce the same setup locally.
+- Backend: http://localhost:8000
+- Frontend: http://localhost:5173
+- API Docs: http://localhost:8000/docs
+
+### Demo Script
+
+```bash
+./scripts/demo.sh
+```
+
+This script walks through starting services, creating a user, making tickets, and exporting CSV.
+
+## Getting Started (Local Development)
 
 ### 1. Requirements
 
 - Python 3.12+
 - Node.js 20+ with npm
-- SQLite (bundled with Python) or a PostgreSQL instance if you override `DATABASE_URL`
-- Docker (optional, only needed for the Compose workflow)
+- Docker (recommended for full stack)
 
 ### 2. Backend (FastAPI)
 
 ```bash
 # create the virtual environment
 uv venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
+source .venv/bin/activate
 
-# install everything declared in pyproject.toml / uv.lock
+# install dependencies
 uv sync
 
+# set environment variables
 export DATABASE_URL="sqlite:///./database.db"
 export FRONTEND_URL="http://localhost:5173"
+export SECRET_KEY="your-secret-key-here"
 export ENV="dev"
-# Note: the code currently expects SECRTET_KEY (typo) – match the variable name
-export SECRTET_KEY="replace-with-a-long-random-string"
 
+# run the server
 uv run uvicorn app.main:app --reload --port 8000
 ```
 
-- The first run automatically creates the SQLite file and tables through `app.database.init_db`.
-- Interactive docs are exposed at `http://localhost:8000/docs` (only when `ENV != "prod"`).
-- To seed your first admin, call `POST /api/users` with `"is_admin": true`, then sign in through the UI.
-
-Example user bootstrap:
+### 3. Create Admin User
 
 ```bash
-curl -X POST http://localhost:8000/api/users \
-  -H "Content-Type: application/json" \
-  -d '{"name":"Admin","email":"admin@example.com","password":"admin1234","is_admin":true}'
+python scripts/seed_admin.py
 ```
 
-### 3. Frontend (React + Vite)
+Or with custom credentials:
+
+```bash
+ADMIN_EMAIL=admin@example.com ADMIN_PASSWORD='SecurePass123!' python scripts/seed_admin.py
+```
+
+### 4. Frontend (React + Vite)
 
 ```bash
 cd frontend
 npm install
-# point the Vite proxy at the backend you just started
-VITE_BACKEND_URL="http://localhost:8000" npm run dev -- --host 0.0.0.0 --port 5173
+npm run dev -- --host 0.0.0.0 --port 5173
 ```
 
-- The Vite dev server proxies `/api` calls to `VITE_BACKEND_URL`, so set it to wherever the FastAPI service runs.
-- If you are consuming a deployed API instead of proxying, set `VITE_API_BASE_URL=https://your-api.example.com` so the `apiFetch` helper reaches the correct origin.
-- The app exposes `/login`, `/tickets`, `/tickets/:id`, and `/admin` routes. Admin-only pages are wrapped with `RequireAdmin`.
-
-### 4. Running everything with Docker Compose
-
-```bash
-docker compose up --build
-```
-
-- Backend is served on `http://localhost:8000`, frontend on `http://localhost:5173`.
-- Ticket data is persisted in the named `db-data` volume (SQLite inside the backend container).
-- Hot reload works because the project directories are mounted into the containers. Use this workflow when you want parity with production networking (the frontend resolves the backend service name).
-
-## Environment variables
+## Environment Variables
 
 | Name            | Default                     | Description |
 |-----------------|-----------------------------|-------------|
-| `DATABASE_URL`  | `sqlite:///database.db`     | SQLModel connection string; set to `postgresql+psycopg://…` for Postgres. |
-| `ENV`           | `dev`                       | When set to `prod`, disables FastAPI docs/OpenAPI routes and SQL echo. |
-| `FRONTEND_URL`  | `http://localhost:5173`     | Allowed origin for CORS. |
-| `SECRTET_KEY`   | hard-coded fallback         | Secret used when signing JWTs (`SECRTET_KEY` spelling matches the code). |
-| `PORT`          | `8000`                      | Used by Render/heroku-style platforms; uvicorn falls back to 8000 locally. |
-| `VITE_BACKEND_URL` | `http://backend:8000`   | Target the Vite dev server proxies `/api` requests to; override to `http://localhost:8000` outside Docker. |
-| `VITE_API_BASE_URL` | empty                  | Absolute base URL passed to `apiFetch` when you do not rely on the `/api` proxy. |
+| `DATABASE_URL`  | `sqlite:///database.db`     | Database connection string |
+| `ENV`           | `dev`                       | Set to `prod` to disable docs and enable strict security |
+| `SECRET_KEY`    | dev fallback                | JWT signing key (REQUIRED in production) |
+| `FRONTEND_URL`  | `http://localhost:5173`     | Allowed origin for CORS |
+| `REDIS_URL`     | `redis://redis:6379/0`      | Redis connection for rate limiting |
+| `OLLAMA_HOST`   | `http://ollama:11434`       | Ollama API endpoint |
+| `OLLAMA_MODEL`  | `llama3.2:1b`               | AI model for chat |
 
-## API overview
+## API Overview
 
 | Method & Path | Description | Auth |
 |---------------|-------------|------|
-| `POST /api/users` | Register a new user; include `is_admin: true` for operators. | none |
-| `POST /api/users/login` | OAuth2 password-style login (`username` = email) returning a bearer token. | Basic form |
-| `GET /api/users/me` | Current user profile. | Bearer |
-| `GET /api/users/operators` | List admins/operators (used in Admin UI). | Bearer, admin only |
-| `GET /api/users/search?q=` | Partial name search for submitter auto-complete. | Bearer, admin only |
-| `POST /api/tickets/` | Create a ticket; status defaults to `new`. | Bearer |
-| `GET /api/tickets/` | List tickets (requester sees their own, admins see all). | Bearer |
-| `PATCH /api/tickets/{id}` | Requesters can edit descriptions, admins can edit status/assignment/urgency. | Bearer |
-| `DELETE /api/tickets/{id}` | Remove a ticket. | Bearer, admin only |
-| `GET /api/tickets/{id}/comments` | List threaded comments with author names. | Bearer (ticket owner/admin) |
-| `POST /api/tickets/{id}/comments` | Add a comment. | Bearer (ticket owner/admin) |
+| `POST /api/users` | Register a new user | none |
+| `POST /api/users/login` | Login (returns bearer token) | form |
+| `GET /api/users/me` | Current user profile | Bearer |
+| `GET /api/users/operators` | List admins | Bearer, admin |
+| `POST /api/tickets/` | Create a ticket | Bearer |
+| `GET /api/tickets/` | List tickets | Bearer |
+| `PATCH /api/tickets/{id}` | Update ticket | Bearer |
+| `DELETE /api/tickets/{id}` | Delete ticket | Bearer, admin |
+| `GET /api/export/tickets` | Export tickets as CSV | Bearer |
+| `POST /api/chat/message` | Send message to AI | Bearer |
+| `POST /api/chat/create-ticket` | Create ticket from AI chat | Bearer |
+| `GET /api/tickets/{id}/comments` | List comments | Bearer |
+| `POST /api/tickets/{id}/comments` | Add comment | Bearer |
 
-- Ticket statuses: `new`, `assigned`, `pending`, `closed`. Setting `operator_id` automatically transitions `new → assigned` unless status is explicitly provided.
-- Comments are sorted chronologically and stored separately for history.
+## Security Features
+
+- **Password hashing:** Argon2 via pwdlib
+- **JWT authentication:** With expiry validation
+- **Role-based access:** Admin vs regular user permissions
+- **Rate limiting:** 5 login attempts/min, 3 registrations/min per IP
+- **Security headers:** X-Frame-Options, CSP, XSS-Protection
+- **Input validation:** Password strength requirements (8+ chars, mixed case, number, symbol)
 
 ## Testing
 
 ```bash
-uv run pytest
+# Run all tests
+pytest tests/ -v
+
+# Run security tests
+pytest tests/test_security.py -v
+
+# Run async tests
+pytest tests/test_refresh.py -v
 ```
 
-- Tests are located in `tests/` and use an ephemeral SQLite database via `conftest.py`. Each run deletes `test.db`, creates tables, and restores overrides for `get_session`.
-- The suites cover ticket creation/listing, user permissions, and ticket comments. Add new tests alongside existing helpers such as `auth_header` and `login` for consistency.
+## Documentation
 
-> Need an additional backend dependency? Run `uv add <package>` (or `uv add --dev <package>` for dev-only) so both `pyproject.toml` and `uv.lock` stay in sync.
+- [EX3 Notes](docs/EX3-notes.md) - Architecture and key rotation
+- [Compose Runbook](docs/runbooks/compose.md) - Health checks and troubleshooting
 
-## Common workflows
+## Common Workflows
 
-- **Create a requester:** use the Tickets page to open issues and add follow-up comments.
-- **Act as an admin:** log in with an admin account to view `/admin`, filter tickets (quick filters + advanced modal), assign operators, or close requests.
-- **Call the API directly:** follow the `API overview` table; remember that FastAPI expects bearer tokens in the `Authorization` header (e.g., `Authorization: Bearer <token>`).
+- **Create a ticket:** Use the Tickets page or AI Chat modal
+- **Export data:** Click "Export CSV" on the tickets page
+- **Admin dashboard:** Log in as admin to view `/admin`, assign operators, close tickets
+- **AI ticket creation:** Click "Create with AI" and describe your issue naturally
 
 Happy hacking!
