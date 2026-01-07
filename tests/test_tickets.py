@@ -1,4 +1,8 @@
 # tests/test_tickets.py
+# Strong test password that meets all requirements
+TEST_PASSWORD = "TestPass123!"
+
+
 def auth_header(token: str) -> dict:
     return {"Authorization": f"Bearer {token}"}
 
@@ -13,7 +17,7 @@ def login(client, email, password) -> str:
     return r.json()["access_token"]
 
 
-def create_user(client, name, email, password):
+def create_user(client, name, email, password=TEST_PASSWORD):
     r = client.post(
         "/api/users", json={"name": name, "email": email, "password": password}
     )
@@ -22,8 +26,8 @@ def create_user(client, name, email, password):
 
 
 def test_user_can_create_and_see_own_tickets(client):
-    create_user(client, "Ben", "ben@example.com", "pass1234")
-    token = login(client, "ben@example.com", "pass1234")
+    create_user(client, "Ben", "ben@example.com")
+    token = login(client, "ben@example.com", TEST_PASSWORD)
 
     payload = {"description": "Printer broken", "request_type": "hardware"}
     r = client.post("/api/tickets/", json=payload, headers=auth_header(token))
@@ -37,8 +41,8 @@ def test_user_can_create_and_see_own_tickets(client):
 
 
 def test_patch_restrictions_for_user(client):
-    create_user(client, "U1", "u1@example.com", "pass1234")
-    token = login(client, "u1@example.com", "pass1234")
+    create_user(client, "U1", "u1@example.com")
+    token = login(client, "u1@example.com", TEST_PASSWORD)
 
     r = client.post(
         "/api/tickets/",

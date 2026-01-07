@@ -5,7 +5,9 @@ from app.routers import health
 from app.routers import users
 from app.routers import tickets
 from app.routers import comments
+from app.routers import chat
 from fastapi.middleware.cors import CORSMiddleware
+from app.middleware.security_headers import SecurityHeadersMiddleware
 
 ENV = os.getenv("ENV", "dev")  # "prod" on Render
 
@@ -15,6 +17,9 @@ app = FastAPI(
     redoc_url=None if ENV == "prod" else "/redoc",
     openapi_url=None if ENV == "prod" else "/openapi.json",
 )
+
+# Security headers middleware
+app.add_middleware(SecurityHeadersMiddleware)
 
 
 @app.on_event("startup")
@@ -26,6 +31,7 @@ app.include_router(health.router, prefix="/api")
 app.include_router(users.router, prefix="/api")
 app.include_router(tickets.router, prefix="/api")
 app.include_router(comments.router, prefix="/api")
+app.include_router(chat.router, prefix="/api")
 
 
 @app.get("/")

@@ -44,7 +44,6 @@ export default function LoginPage() {
     <div className="authContainer">
       <div className="authCard">
         <div style={{ textAlign: "center", marginBottom: "32px" }}>
-          <div style={{ fontSize: "48px", marginBottom: "16px" }}>🎫</div>
           <h1 className="h1">Welcome back</h1>
           <p className="h2">Sign in to manage your tickets</p>
         </div>

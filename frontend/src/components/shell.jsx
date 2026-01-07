@@ -28,7 +28,7 @@ export default function Shell({ title, subtitle, children }) {
         <div className="headerInner">
           <div className="brand">
             <Link to={user?.is_admin ? "/admin" : "/tickets"}>
-              🎫 Mini Service Desk
+              🎟️ Mini Service Desk
             </Link>
             <span className="badge">{user?.is_admin ? "Admin" : "User"}</span>
           </div>

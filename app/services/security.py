@@ -14,13 +14,39 @@ from app.models.user import User
 
 
 # ====================== CONFIG ============================
-SECRET_KEY = os.getenv("SECRTET_KEY", "1qaz3edc5tgb6yhn7ujm8ik,9ol.0p;/")
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    if os.getenv("ENV") == "prod":
+        raise RuntimeError("SECRET_KEY environment variable must be set in production")
+    SECRET_KEY = "dev-only-secret-key-change-in-production"
+
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
 password_hash = PasswordHash.recommended()
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/users/login")
+
+
+# ====================== PASSWORD VALIDATION =====================
+
+
+def validate_password(password: str) -> tuple[bool, str]:
+    """
+    Validate password strength.
+    Returns (is_valid, error_message).
+    """
+    if len(password) < 8:
+        return False, "Password must be at least 8 characters long"
+    if not any(c.isupper() for c in password):
+        return False, "Password must contain at least one uppercase letter"
+    if not any(c.islower() for c in password):
+        return False, "Password must contain at least one lowercase letter"
+    if not any(c.isdigit() for c in password):
+        return False, "Password must contain at least one number"
+    if not any(c in "!@#$%^&*()_+-=[]{}|;':\",./<>?" for c in password):
+        return False, "Password must contain at least one symbol (!@#$%^&*...)"
+    return True, ""
 
 
 # ====================== PASSWORD HELPERS =====================

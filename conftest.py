@@ -6,6 +6,7 @@ from sqlmodel import SQLModel, Session, create_engine
 
 from app.main import app
 from app.database import get_session
+from app.services.rate_limiter import rate_limiter
 
 TEST_DB_URL = "sqlite:///./test.db"
 engine = create_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
@@ -29,6 +30,8 @@ def setup_db():
 
 @pytest.fixture()
 def client():
+    # Clear rate limiter before each test
+    rate_limiter._requests.clear()
     app.dependency_overrides[get_session] = override_get_session
     with TestClient(app) as c:
         yield c

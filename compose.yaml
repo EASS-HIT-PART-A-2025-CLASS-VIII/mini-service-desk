@@ -1,4 +1,11 @@
 services:
+  ollama:
+    image: ollama/ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+
   backend:
     build:
       context: .
@@ -7,9 +14,13 @@ services:
       - "8000:8000"
     environment:
       - DATABASE_URL=sqlite:////data/database.db
+      - OLLAMA_HOST=http://ollama:11434
+      - OLLAMA_MODEL=llama3.2:1b
     volumes:
       - db-data:/data
       - ./app:/app/app
+    depends_on:
+      - ollama
 
   frontend:
     build:
@@ -27,3 +38,4 @@ services:
 
 volumes:
   db-data:
+  ollama-data:

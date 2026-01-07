@@ -8,15 +8,26 @@ from app.models.user import User, UserCreate, UserRead
 from app.services.security import (
     hash_password,
     verify_password,
+    validate_password,
     create_access_token,
     get_current_user,
 )
+from app.services.rate_limiter import rate_limit_login, rate_limit_register
 
 router = APIRouter(prefix="/users", tags=["users"])
 
 
 @router.post("/", response_model=UserRead, status_code=status.HTTP_201_CREATED)
-def create_user(data: UserCreate, session: Session = Depends(get_session)):
+def create_user(
+    data: UserCreate,
+    session: Session = Depends(get_session),
+    _rate_limit: str = Depends(rate_limit_register),
+):
+    # Validate password strength
+    is_valid, error_msg = validate_password(data.password)
+    if not is_valid:
+        raise HTTPException(status_code=400, detail=error_msg)
+
     existing = session.exec(select(User).where(User.email == data.email)).first()
     if existing:
         raise HTTPException(status_code=400, detail="Email already exists")
@@ -25,7 +36,7 @@ def create_user(data: UserCreate, session: Session = Depends(get_session)):
         name=data.name,
         email=data.email,
         hashed_password=hash_password(data.password),
-        is_admin=data.is_admin,
+        is_admin=False,  # Security: Never allow user to set their own admin status
     )
 
     session.add(new_user)
@@ -70,7 +81,11 @@ def search_users(
 
 
 @router.get("/{user_id}", response_model=UserRead)
-def get_user(user_id: int, session: Session = Depends(get_session)):
+def get_user(
+    user_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
     user = session.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -81,6 +96,7 @@ def get_user(user_id: int, session: Session = Depends(get_session)):
 def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     session: Session = Depends(get_session),
+    _rate_limit: str = Depends(rate_limit_login),
 ):
     email = form_data.username
 

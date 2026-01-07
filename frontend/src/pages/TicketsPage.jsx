@@ -1,10 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "../api/client.js";
 import { useAuth } from "../auth/AuthContext.jsx";
 import { useNavigate, Link } from "react-router-dom";
 import Shell from "../components/shell.jsx";
+import ChatModal from "../components/ChatModal.jsx";
+import CreateTicketModal from "../components/CreateTicketModal.jsx";
 
-function truncateText(text, max = 30) {
+function truncateText(text, max = 40) {
   if (!text) return "";
   return text.length > max ? `${text.slice(0, max)}…` : text;
 }
@@ -28,18 +30,33 @@ function getStatusColor(status) {
   }
 }
 
+function getStatusIcon(status) {
+  switch (status) {
+    case "new": return "🆕";
+    case "assigned": return "👤";
+    case "pending": return "⏳";
+    case "closed": return "✅";
+    default: return "📋";
+  }
+}
+
 export default function TicketsPage() {
-  const { token, logout } = useAuth();
+  const { token } = useAuth();
   const navigate = useNavigate();
 
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState(null);
 
-  const [description, setDescription] = useState("");
-  const [requestType, setRequestType] = useState("software");
-  const [urgency, setUrgency] = useState("normal");
-  const [submitting, setSubmitting] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [manualOpen, setManualOpen] = useState(false);
+
+  // Split tickets into active and closed
+  const { activeTickets, closedTickets } = useMemo(() => {
+    const active = tickets.filter(t => t.status !== "closed").sort((a, b) => b.id - a.id);
+    const closed = tickets.filter(t => t.status === "closed").sort((a, b) => b.id - a.id);
+    return { activeTickets: active, closedTickets: closed };
+  }, [tickets]);
 
   async function loadTickets() {
     setErr(null);
@@ -59,152 +76,152 @@ export default function TicketsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function createTicket(e) {
-    e.preventDefault();
-    setErr(null);
-    setSubmitting(true);
-
-    try {
-      await apiFetch("/api/tickets/", {
-        token,
-        method: "POST",
-        json: {
-          description,
-          request_type: requestType,
-          urgency,
-        },
-      });
-
-      setDescription("");
-      setRequestType("software");
-      setUrgency("normal");
-      await loadTickets();
-    } catch (e) {
-      setErr(e.message);
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  function onLogout() {
-    logout();
-    navigate("/login");
+  function TicketRow({ ticket, index }) {
+    return (
+      <li
+        className="listItem"
+        style={{ animationDelay: `${index * 0.03}s` }}
+      >
+        <Link className="link" to={`/tickets/${ticket.id}`} title={ticket.description ?? ""}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", flex: 1 }}>
+              <span style={{ fontSize: "18px" }}>{getStatusIcon(ticket.status)}</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <b style={{ color: "#7c5cff" }}>#{ticket.id}</b>
+                  <span style={{ color: "var(--text-primary)" }}>
+                    {truncateText(ticket.description, 35)}
+                  </span>
+                </div>
+                <div className="meta" style={{ marginTop: "4px" }}>
+                  <span style={{ color: getUrgencyColor(ticket.urgency), fontWeight: 500 }}>
+                    {ticket.urgency}
+                  </span>
+                  <span>•</span>
+                  <span>{ticket.request_type}</span>
+                </div>
+              </div>
+            </div>
+            <span
+              className="badge"
+              style={{
+                borderColor: getStatusColor(ticket.status),
+                color: getStatusColor(ticket.status),
+              }}
+            >
+              {ticket.status}
+            </span>
+          </div>
+        </Link>
+      </li>
+    );
   }
 
   return (
     <>
-      <Shell title="My Tickets" subtitle="Create and track support requests">
+      <Shell title="My Tickets" subtitle="Create and track your support requests">
+        {/* Action Buttons */}
+        <div style={{ display: "flex", gap: "12px", marginBottom: "24px" }}>
+          <button 
+            className="btn primary" 
+            onClick={() => setManualOpen(true)}
+            style={{ flex: 1, padding: "16px", fontSize: "15px" }}
+          >
+            📝 Create Ticket
+          </button>
+          <button 
+            className="btn ghost" 
+            onClick={() => setChatOpen(true)}
+            style={{ 
+              flex: 1, 
+              padding: "16px", 
+              fontSize: "15px",
+              background: "rgba(0, 212, 255, 0.1)",
+              borderColor: "rgba(0, 212, 255, 0.3)",
+            }}
+          >
+            🤖 Create with AI
+          </button>
+        </div>
+
         {err && <div className="error">{err}</div>}
 
-        <div className="grid">
-          {/* Create Ticket Card */}
-          <section className="card">
-            <h3 className="cardTitle">📝 Create New Ticket</h3>
+        {/* Active Tickets Section */}
+        <section className="card" style={{ marginBottom: "24px" }}>
+          <div className="spread" style={{ marginBottom: "16px" }}>
+            <h3 className="cardTitle" style={{ margin: 0 }}>
+              📥 Active Tickets
+            </h3>
+            <span className="badge" style={{ borderColor: "#00d4ff", color: "#00d4ff" }}>
+              {activeTickets.length}
+            </span>
+          </div>
 
-            <form onSubmit={createTicket} className="form">
-              <div>
-                <label className="label">Description</label>
-                <textarea
-                  className="textarea"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  rows={4}
-                  placeholder="Describe your issue or request..."
-                />
-              </div>
-
-              <div>
-                <label className="label">Category</label>
-                <select
-                  className="select"
-                  value={requestType}
-                  onChange={(e) => setRequestType(e.target.value)}
-                >
-                  <option value="software">💻 Software</option>
-                  <option value="hardware">🖥️ Hardware</option>
-                  <option value="environment">🏢 Environment</option>
-                  <option value="logistics">📦 Logistics</option>
-                  <option value="other">📋 Other</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="label">Urgency</label>
-                <select
-                  className="select"
-                  value={urgency}
-                  onChange={(e) => setUrgency(e.target.value)}
-                >
-                  <option value="low">🟢 Low</option>
-                  <option value="normal">🟡 Normal</option>
-                  <option value="high">🔴 High</option>
-                </select>
-              </div>
-
-              <button
-                className="btn primary"
-                disabled={!description || submitting}
-                style={{ marginTop: "8px" }}
-              >
-                {submitting ? "Creating..." : "🎫 Create Ticket"}
-              </button>
-            </form>
-          </section>
-
-          {/* Tickets List Card */}
-          <section className="card">
-            <div className="spread" style={{ marginBottom: "16px" }}>
-              <h3 className="cardTitle" style={{ margin: 0 }}>📋 My Tickets</h3>
-              <span className="badge">{tickets.length} total</span>
+          {loading ? (
+            <div className="meta loading" style={{ padding: "32px 0", textAlign: "center" }}>
+              Loading your tickets...
             </div>
-
-            {loading ? (
-              <div className="meta loading">Loading tickets...</div>
-            ) : tickets.length === 0 ? (
-              <div className="meta">No tickets yet. Create your first one!</div>
-            ) : (
+          ) : activeTickets.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "32px 0" }}>
+              <div style={{ fontSize: "36px", marginBottom: "8px", opacity: 0.5 }}>🎉</div>
+              <p className="meta">No active tickets</p>
+              <p className="meta" style={{ fontSize: "12px" }}>All caught up! Create a new ticket if you need help.</p>
+            </div>
+          ) : (
+            <div style={{ maxHeight: "300px", overflowY: "auto", paddingRight: "8px", marginRight: "-8px" }}>
               <ul className="list">
-                {tickets.map((t, index) => (
-                  <li
-                    key={t.id}
-                    className="listItem"
-                    style={{ animationDelay: `${index * 0.05}s` }}
-                  >
-                    <Link className="link" to={`/tickets/${t.id}`} title={t.description ?? ""}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
-                        <div>
-                          <b>#{t.id}</b> — {truncateText(t.description, 30)}
-                        </div>
-                        <span
-                          className="badge"
-                          style={{
-                            borderColor: getStatusColor(t.status),
-                            color: getStatusColor(t.status),
-                          }}
-                        >
-                          {t.status}
-                        </span>
-                      </div>
-                      <div className="meta">
-                        <span
-                          style={{
-                            color: getUrgencyColor(t.urgency),
-                            fontWeight: 500,
-                          }}
-                        >
-                          {t.urgency} priority
-                        </span>
-                        <span>•</span>
-                        <span>{t.request_type}</span>
-                      </div>
-                    </Link>
-                  </li>
+                {activeTickets.map((t, i) => (
+                  <TicketRow key={t.id} ticket={t} index={i} />
                 ))}
               </ul>
-            )}
-          </section>
-        </div>
+            </div>
+          )}
+        </section>
+
+        {/* Ticket History Section */}
+        <section className="card">
+          <div className="spread" style={{ marginBottom: "16px" }}>
+            <h3 className="cardTitle" style={{ margin: 0 }}>
+              📜 Ticket History
+            </h3>
+            <span className="badge" style={{ borderColor: "#22c55e", color: "#22c55e" }}>
+              {closedTickets.length} closed
+            </span>
+          </div>
+
+          {loading ? (
+            <div className="meta loading" style={{ padding: "32px 0", textAlign: "center" }}>
+              Loading history...
+            </div>
+          ) : closedTickets.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "32px 0" }}>
+              <div style={{ fontSize: "36px", marginBottom: "8px", opacity: 0.5 }}>📭</div>
+              <p className="meta">No closed tickets yet</p>
+            </div>
+          ) : (
+            <div style={{ maxHeight: "250px", overflowY: "auto", paddingRight: "8px", marginRight: "-8px" }}>
+              <ul className="list">
+                {closedTickets.map((t, i) => (
+                  <TicketRow key={t.id} ticket={t} index={i} />
+                ))}
+              </ul>
+            </div>
+          )}
+        </section>
       </Shell>
+
+      {/* Modals */}
+      <ChatModal
+        open={chatOpen}
+        onClose={() => setChatOpen(false)}
+        onTicketCreated={() => loadTickets()}
+      />
+      <CreateTicketModal
+        open={manualOpen}
+        onClose={() => setManualOpen(false)}
+        onTicketCreated={() => loadTickets()}
+      />
     </>
   );
 }
+

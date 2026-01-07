@@ -161,6 +161,8 @@ export default function AdvancedFilterModal({ open, value, onClose, onApply, tok
   function clearAll() {
     setDraft({ rules: [defaultRule()] });
     setSubmitterSug({});
+    onApply(null);  // Turn off the filter
+    onClose();
   }
 
   async function fetchSubmitterSuggestions(idx, q) {

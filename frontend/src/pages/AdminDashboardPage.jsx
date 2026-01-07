@@ -144,6 +144,24 @@ export default function AdminDashboardPage() {
     return t?.[key];
   }
 
+  // ========== STATISTICS ==========
+  const stats = useMemo(() => {
+    const total = tickets.length;
+    const byStatus = { new: 0, assigned: 0, pending: 0, closed: 0 };
+    let highPriority = 0;
+    let unassigned = 0;
+
+    for (const t of tickets) {
+      byStatus[t.status] = (byStatus[t.status] || 0) + 1;
+      if (t.urgency === "high") highPriority++;
+      if (t.operator_id == null) unassigned++;
+    }
+
+    const open = byStatus.new + byStatus.assigned + byStatus.pending;
+
+    return { total, open, highPriority, unassigned, byStatus };
+  }, [tickets]);
+
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
 
@@ -213,9 +231,159 @@ export default function AdminDashboardPage() {
     return sortDir === "asc" ? "↑" : "↓";
   }
 
+  function setQuickFilter(filter) {
+    if (filter === "high") {
+      setStatusFilter("all");
+      setQ("");
+      // Use advanced filter for high priority
+    } else if (filter === "unassigned") {
+      setStatusFilter("new");
+      setQ("");
+    } else {
+      setStatusFilter(filter);
+      setQ("");
+    }
+  }
+
   return (
     <>
       <Shell title="Admin Dashboard" subtitle="Manage all tickets across the system">
+        {/* ========== STATISTICS CARDS ========== */}
+        <div className="statsGrid">
+          <div 
+            className="statCard" 
+            style={{ "--stat-accent": "linear-gradient(135deg, #7c5cff, #00d4ff)" }}
+          >
+            <div className="statIcon">📊</div>
+            <div className="statValue">{stats.total}</div>
+            <div className="statLabel">Total Tickets</div>
+            <div className="statSubtext">All time</div>
+          </div>
+
+          <div 
+            className="statCard"
+            style={{ "--stat-accent": "#00d4ff", "--stat-glow": "rgba(0, 212, 255, 0.2)" }}
+          >
+            <div className="statIcon">📥</div>
+            <div className="statValue">{stats.open}</div>
+            <div className="statLabel">Open Tickets</div>
+            <div className="statSubtext">Needs attention</div>
+          </div>
+
+          <div 
+            className="statCard"
+            style={{ "--stat-accent": "#ef4444", "--stat-glow": "rgba(239, 68, 68, 0.2)" }}
+          >
+            <div className="statIcon">🔥</div>
+            <div className="statValue">{stats.highPriority}</div>
+            <div className="statLabel">High Priority</div>
+            <div className="statSubtext">Urgent</div>
+          </div>
+
+          <div 
+            className="statCard"
+            style={{ "--stat-accent": "#22c55e", "--stat-glow": "rgba(34, 197, 94, 0.2)" }}
+          >
+            <div className="statIcon">✅</div>
+            <div className="statValue">{stats.byStatus.closed}</div>
+            <div className="statLabel">Closed</div>
+            <div className="statSubtext">Resolved</div>
+          </div>
+        </div>
+
+        {/* ========== STATUS DISTRIBUTION ========== */}
+        <section className="card" style={{ marginBottom: "24px" }}>
+          <h3 className="cardTitle" style={{ marginBottom: "8px" }}>📈 Status Distribution</h3>
+          
+          <div className="statusBar">
+            {stats.total > 0 && (
+              <>
+                <div 
+                  className="segment" 
+                  style={{ 
+                    width: `${(stats.byStatus.new / stats.total) * 100}%`, 
+                    background: "#00d4ff" 
+                  }} 
+                />
+                <div 
+                  className="segment" 
+                  style={{ 
+                    width: `${(stats.byStatus.assigned / stats.total) * 100}%`, 
+                    background: "#7c5cff" 
+                  }} 
+                />
+                <div 
+                  className="segment" 
+                  style={{ 
+                    width: `${(stats.byStatus.pending / stats.total) * 100}%`, 
+                    background: "#f59e0b" 
+                  }} 
+                />
+                <div 
+                  className="segment" 
+                  style={{ 
+                    width: `${(stats.byStatus.closed / stats.total) * 100}%`, 
+                    background: "#22c55e" 
+                  }} 
+                />
+              </>
+            )}
+          </div>
+
+          <div className="statusLegend">
+            <div className="legendItem">
+              <span className="legendDot" style={{ background: "#00d4ff" }} />
+              <span>New <b>{stats.byStatus.new}</b></span>
+            </div>
+            <div className="legendItem">
+              <span className="legendDot" style={{ background: "#7c5cff" }} />
+              <span>Assigned <b>{stats.byStatus.assigned}</b></span>
+            </div>
+            <div className="legendItem">
+              <span className="legendDot" style={{ background: "#f59e0b" }} />
+              <span>Pending <b>{stats.byStatus.pending}</b></span>
+            </div>
+            <div className="legendItem">
+              <span className="legendDot" style={{ background: "#22c55e" }} />
+              <span>Closed <b>{stats.byStatus.closed}</b></span>
+            </div>
+          </div>
+        </section>
+
+        {/* ========== QUICK ACTIONS ========== */}
+        <div className="quickActions">
+          <button 
+            className={`btn ghost ${statusFilter === "all" ? "active" : ""}`}
+            onClick={() => setQuickFilter("all")}
+          >
+            📋 All Tickets
+          </button>
+          <button 
+            className={`btn ghost ${statusFilter === "new" ? "active" : ""}`}
+            onClick={() => setQuickFilter("new")}
+          >
+            🆕 New ({stats.byStatus.new})
+          </button>
+          <button 
+            className={`btn ghost ${statusFilter === "assigned" ? "active" : ""}`}
+            onClick={() => setQuickFilter("assigned")}
+          >
+            👤 Assigned ({stats.byStatus.assigned})
+          </button>
+          <button 
+            className={`btn ghost ${statusFilter === "pending" ? "active" : ""}`}
+            onClick={() => setQuickFilter("pending")}
+          >
+            ⏳ Pending ({stats.byStatus.pending})
+          </button>
+          <button 
+            className={`btn ghost ${statusFilter === "closed" ? "active" : ""}`}
+            onClick={() => setQuickFilter("closed")}
+          >
+            ✅ Closed ({stats.byStatus.closed})
+          </button>
+        </div>
+
         <div className="toolbarRow" style={{ marginBottom: "16px" }}>
           <button className="btn ghost" onClick={loadTickets}>
             🔄 Refresh
@@ -278,7 +446,7 @@ export default function AdminDashboardPage() {
         </section>
 
         <section className="card">
-          <div className="tableWrap">
+          <div className="tableWrap" style={{ maxHeight: "500px", overflowY: "auto" }}>
             <table className="table">
               <thead>
                 <tr>
@@ -354,7 +522,10 @@ export default function AdminDashboardPage() {
                   </tr>
                 ) : (
                   pageRows.map((t) => (
-                    <tr key={t.id} className="tr">
+                    <tr 
+                      key={t.id} 
+                      className={`tr ${t.urgency === "high" ? "highPriority" : ""}`}
+                    >
                       <td className="td">
                         <input
                           className="checkbox"
